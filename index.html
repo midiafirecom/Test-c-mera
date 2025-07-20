@@ -2,7 +2,7 @@
 <html lang="pt-br">
 <head>
   <meta charset="UTF-8">
-  <title>Detector de Dedo</title>
+  <title>Test Lol</title>
   <style>
     body {
       margin: 0;
@@ -16,7 +16,7 @@
       width: 100vw;
       height: 100vh;
       object-fit: cover;
-      transform: scaleX(-1); /* Efeito espelho */
+      transform: scaleX(-1); /* Espelho */
       z-index: 1;
     }
 
@@ -25,7 +25,7 @@
       top: 0;
       left: 0;
       z-index: 2;
-      transform: scaleX(-1); /* Espelha o desenho para combinar com o vídeo */
+      transform: scaleX(-1); /* Espelho */
     }
 
     #statusBox {
@@ -60,12 +60,15 @@
     const ctx = canvas.getContext('2d');
     const statusBox = document.getElementById('statusBox');
 
+    let isOn = false;
+    let wasInside = false; // Controla se já estava dentro no último frame
+
     function resizeCanvas() {
       canvas.width = video.videoWidth;
       canvas.height = video.videoHeight;
     }
 
-    function updateStatus(isOn) {
+    function updateStatus() {
       statusBox.textContent = isOn ? "On" : "Off";
       statusBox.style.backgroundColor = isOn ? "green" : "red";
     }
@@ -94,11 +97,9 @@
       ctx.clearRect(0, 0, canvas.width, canvas.height);
       ctx.drawImage(results.image, 0, 0, canvas.width, canvas.height);
 
-      let isOn = false;
-
       if (results.multiHandLandmarks && results.multiHandLandmarks.length > 0) {
         const landmarks = results.multiHandLandmarks[0];
-        const tip = landmarks[8]; // Ponta do dedo indicador
+        const tip = landmarks[8];
 
         const x = tip.x * canvas.width;
         const y = tip.y * canvas.height;
@@ -111,14 +112,23 @@
         ctx.fill();
 
         const pointOnScreen = {
-          x: (1 - tip.x) * window.innerWidth, // invertendo X para combinar com a tela espelhada
+          x: (1 - tip.x) * window.innerWidth, // espelhamento horizontal
           y: tip.y * window.innerHeight
         };
 
-        isOn = checkCollision(pointOnScreen.x, pointOnScreen.y);
+        const isInside = checkCollision(pointOnScreen.x, pointOnScreen.y);
+
+        if (isInside && !wasInside) {
+          // Entrou no botão agora → toggle!
+          isOn = !isOn;
+          updateStatus();
+        }
+
+        wasInside = isInside;
+      } else {
+        wasInside = false;
       }
 
-      updateStatus(isOn);
       ctx.restore();
     });
 
