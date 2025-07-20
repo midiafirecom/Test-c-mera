@@ -1,95 +1,93 @@
 <!DOCTYPE html>
-<html lang="pt-BR">
+<html>
 <head>
-  <meta charset="UTF-8">
-  <title>Detector de 👍</title>
+  <title>test 7652</title>
+  <script src="https://cdn.jsdelivr.net/npm/@mediapipe/hands/hands.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/@mediapipe/camera_utils/camera_utils.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/@mediapipe/drawing_utils/drawing_utils.min.js"></script>
   <style>
-    video {
+    video, canvas {
       position: fixed;
-      top: 0;
-      left: 0;
-      width: 100vw;
-      height: 100vh;
-      object-fit: cover;
-      z-index: -1;
-    }
-    #status {
-      position: absolute;
-      top: 20px;
-      left: 20px;
-      background: rgba(0, 0, 0, 0.7);
-      color: white;
-      padding: 10px 15px;
+      top: 10px;
+      right: 10px;
+      width: 300px;
       border-radius: 10px;
-      font-size: 18px;
+      z-index: 1;
+    }
+
+    canvas {
+      z-index: 2;
+      pointer-events: none;
     }
   </style>
 </head>
 <body>
-  <video id="video" autoplay playsinline></video>
-  <div id="status">Esperando gesto 👍...</div>
 
-  <script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs-core"></script>
-  <script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs-converter"></script>
-  <script src="https://cdn.jsdelivr.net/npm/@tensorflow-models/handpose"></script>
-  <script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs-backend-webgl"></script>
+<video id="input_video" autoplay></video>
+<canvas id="output_canvas" width="640" height="480"></canvas>
 
-  <script>
-    const video = document.getElementById('video');
-    const statusText = document.getElementById('status');
+<script>
+  const videoElement = document.getElementById('input_video');
+  const canvasElement = document.getElementById('output_canvas');
+  const canvasCtx = canvasElement.getContext('2d');
 
-    async function setupCamera() {
-      const stream = await navigator.mediaDevices.getUserMedia({
-        video: { facingMode: "user" },
-        audio: false
-      });
-      video.srcObject = stream;
-      return new Promise(resolve => {
-        video.onloadedmetadata = () => resolve(video);
-      });
+  function isHandOpen(landmarks) {
+    const tips = [8, 12, 16, 20]; // Pontas dos dedos
+    const base = [6, 10, 14, 18]; // Nós dos dedos
+
+    for (let i = 0; i < tips.length; i++) {
+      if (landmarks[tips[i]].y > landmarks[base[i]].y) {
+        return false;
+      }
     }
+    return landmarks[4].x < landmarks[3].x; // polegar aberto
+  }
 
-    function isThumbsUp(landmarks) {
-      const thumbTip = landmarks[4];
-      const indexTip = landmarks[8];
-      const middleTip = landmarks[12];
-      const ringTip = landmarks[16];
-      const pinkyTip = landmarks[20];
-      const wrist = landmarks[0];
+  const hands = new Hands({
+    locateFile: (file) => `https://cdn.jsdelivr.net/npm/@mediapipe/hands/${file}`
+  });
 
-      // Verifica se polegar está para cima
-      const thumbUp = thumbTip.y < wrist.y;
-      // Verifica se os outros dedos estão dobrados (tip mais próximo do pulso)
-      const foldedFingers = 
-        indexTip.y > wrist.y &&
-        middleTip.y > wrist.y &&
-        ringTip.y > wrist.y &&
-        pinkyTip.y > wrist.y;
+  hands.setOptions({
+    maxNumHands: 1,
+    modelComplexity: 1,
+    minDetectionConfidence: 0.8,
+    minTrackingConfidence: 0.8
+  });
 
-      return thumbUp && foldedFingers;
-    }
+  hands.onResults((results) => {
+    canvasCtx.clearRect(0, 0, canvasElement.width, canvasElement.height);
 
-    async function main() {
-      await tf.setBackend('webgl');
-      await setupCamera();
-      const model = await handpose.load();
-      statusText.innerText = "Mova a mão com 👍";
+    if (results.multiHandLandmarks.length > 0) {
+      for (const landmarks of results.multiHandLandmarks) {
+        // Mostrar pontos nas pontas dos dedos
+        const fingertipIndexes = [4, 8, 12, 16, 20];
+        fingertipIndexes.forEach(index => {
+          const x = landmarks[index].x * canvasElement.width;
+          const y = landmarks[index].y * canvasElement.height;
+          canvasCtx.beginPath();
+          canvasCtx.arc(x, y, 6, 0, 2 * Math.PI);
+          canvasCtx.fillStyle = 'red';
+          canvasCtx.fill();
+        });
 
-      setInterval(async () => {
-        const predictions = await model.estimateHands(video);
-        if (predictions.length > 0) {
-          const landmarks = predictions[0].landmarks;
-          if (isThumbsUp(landmarks)) {
-            statusText.innerText = "👍 Detectado! Redirecionando...";
-            setTimeout(() => {
-              window.location.href = "https://www.google.com";
-            }, 1000);
-          }
+        // Detectar gesto de mão aberta
+        if (isHandOpen(landmarks)) {
+          window.location.href = "https://www.google.com";
         }
-      }, 300);
+      }
     }
+  });
 
-    main();
-  </script>
+  const camera = new Camera(videoElement, {
+    onFrame: async () => {
+      await hands.send({ image: videoElement });
+    },
+    width: 640,
+    height: 480
+  });
+
+  camera.start();
+</script>
+
 </body>
 </html>
