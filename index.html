@@ -16,6 +16,7 @@
       width: 100vw;
       height: 100vh;
       object-fit: cover;
+      transform: scaleX(-1); /* Efeito espelho */
       z-index: 1;
     }
 
@@ -24,6 +25,7 @@
       top: 0;
       left: 0;
       z-index: 2;
+      transform: scaleX(-1); /* Espelha o desenho para combinar com o vídeo */
     }
 
     #statusBox {
@@ -41,6 +43,7 @@
       font-weight: bold;
       border-radius: 8px;
       z-index: 3;
+      user-select: none;
     }
   </style>
 </head>
@@ -56,8 +59,6 @@
     const canvas = document.getElementById('canvas');
     const ctx = canvas.getContext('2d');
     const statusBox = document.getElementById('statusBox');
-
-    let isInside = false;
 
     function resizeCanvas() {
       canvas.width = video.videoWidth;
@@ -93,12 +94,14 @@
       ctx.clearRect(0, 0, canvas.width, canvas.height);
       ctx.drawImage(results.image, 0, 0, canvas.width, canvas.height);
 
+      let isOn = false;
+
       if (results.multiHandLandmarks && results.multiHandLandmarks.length > 0) {
         const landmarks = results.multiHandLandmarks[0];
-        const fingerTip = landmarks[8];
+        const tip = landmarks[8]; // Ponta do dedo indicador
 
-        const x = fingerTip.x * canvas.width;
-        const y = fingerTip.y * canvas.height;
+        const x = tip.x * canvas.width;
+        const y = tip.y * canvas.height;
 
         ctx.beginPath();
         ctx.arc(x, y, 10, 0, 2 * Math.PI);
@@ -108,17 +111,14 @@
         ctx.fill();
 
         const pointOnScreen = {
-          x: (x / canvas.width) * window.innerWidth,
-          y: (y / canvas.height) * window.innerHeight
+          x: (1 - tip.x) * window.innerWidth, // invertendo X para combinar com a tela espelhada
+          y: tip.y * window.innerHeight
         };
 
-        const inside = checkCollision(pointOnScreen.x, pointOnScreen.y);
-        if (inside !== isInside) {
-          isInside = inside;
-          updateStatus(isInside);
-        }
+        isOn = checkCollision(pointOnScreen.x, pointOnScreen.y);
       }
 
+      updateStatus(isOn);
       ctx.restore();
     });
 
