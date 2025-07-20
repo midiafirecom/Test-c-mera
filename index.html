@@ -1,0 +1,141 @@
+<!DOCTYPE html>
+<html lang="pt-br">
+<head>
+  <meta charset="UTF-8">
+  <title>Detector de Dedo</title>
+  <style>
+    body {
+      margin: 0;
+      overflow: hidden;
+    }
+
+    video {
+      position: absolute;
+      top: 0;
+      left: 0;
+      width: 100vw;
+      height: 100vh;
+      object-fit: cover;
+      z-index: 1;
+    }
+
+    canvas {
+      position: absolute;
+      top: 0;
+      left: 0;
+      z-index: 2;
+    }
+
+    #statusBox {
+      position: absolute;
+      bottom: 20px;
+      left: 20px;
+      width: 100px;
+      height: 100px;
+      background-color: red;
+      color: white;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 24px;
+      font-weight: bold;
+      border-radius: 8px;
+      z-index: 3;
+    }
+  </style>
+</head>
+<body>
+  <video id="video" autoplay playsinline></video>
+  <canvas id="canvas"></canvas>
+  <div id="statusBox">Off</div>
+
+  <script src="https://cdn.jsdelivr.net/npm/@mediapipe/hands/hands.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/@mediapipe/camera_utils/camera_utils.js"></script>
+  <script>
+    const video = document.getElementById('video');
+    const canvas = document.getElementById('canvas');
+    const ctx = canvas.getContext('2d');
+    const statusBox = document.getElementById('statusBox');
+
+    let isInside = false;
+
+    function resizeCanvas() {
+      canvas.width = video.videoWidth;
+      canvas.height = video.videoHeight;
+    }
+
+    function updateStatus(isOn) {
+      statusBox.textContent = isOn ? "On" : "Off";
+      statusBox.style.backgroundColor = isOn ? "green" : "red";
+    }
+
+    function checkCollision(x, y) {
+      const rect = statusBox.getBoundingClientRect();
+      return (
+        x >= rect.left && x <= rect.right &&
+        y >= rect.top && y <= rect.bottom
+      );
+    }
+
+    const hands = new Hands({
+      locateFile: file => `https://cdn.jsdelivr.net/npm/@mediapipe/hands/${file}`
+    });
+
+    hands.setOptions({
+      maxNumHands: 1,
+      modelComplexity: 1,
+      minDetectionConfidence: 0.7,
+      minTrackingConfidence: 0.7
+    });
+
+    hands.onResults(results => {
+      ctx.save();
+      ctx.clearRect(0, 0, canvas.width, canvas.height);
+      ctx.drawImage(results.image, 0, 0, canvas.width, canvas.height);
+
+      if (results.multiHandLandmarks && results.multiHandLandmarks.length > 0) {
+        const landmarks = results.multiHandLandmarks[0];
+        const fingerTip = landmarks[8];
+
+        const x = fingerTip.x * canvas.width;
+        const y = fingerTip.y * canvas.height;
+
+        ctx.beginPath();
+        ctx.arc(x, y, 10, 0, 2 * Math.PI);
+        ctx.fillStyle = "red";
+        ctx.shadowColor = "black";
+        ctx.shadowBlur = 10;
+        ctx.fill();
+
+        const pointOnScreen = {
+          x: (x / canvas.width) * window.innerWidth,
+          y: (y / canvas.height) * window.innerHeight
+        };
+
+        const inside = checkCollision(pointOnScreen.x, pointOnScreen.y);
+        if (inside !== isInside) {
+          isInside = inside;
+          updateStatus(isInside);
+        }
+      }
+
+      ctx.restore();
+    });
+
+    const camera = new Camera(video, {
+      onFrame: async () => {
+        await hands.send({ image: video });
+      },
+      width: 640,
+      height: 480
+    });
+
+    video.onloadeddata = () => {
+      resizeCanvas();
+      window.addEventListener('resize', resizeCanvas);
+    };
+
+    camera.start();
+  </script>
+</body>
+</html>
