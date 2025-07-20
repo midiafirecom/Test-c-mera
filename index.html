@@ -1,151 +1,95 @@
 <!DOCTYPE html>
-<html lang="pt-br">
+<html lang="pt-BR">
 <head>
   <meta charset="UTF-8">
-  <title>Test Lol</title>
+  <title>Detector de 👍</title>
   <style>
-    body {
-      margin: 0;
-      overflow: hidden;
-    }
-
     video {
-      position: absolute;
+      position: fixed;
       top: 0;
       left: 0;
       width: 100vw;
       height: 100vh;
       object-fit: cover;
-      transform: scaleX(-1); /* Espelho */
-      z-index: 1;
+      z-index: -1;
     }
-
-    canvas {
+    #status {
       position: absolute;
-      top: 0;
-      left: 0;
-      z-index: 2;
-      transform: scaleX(-1); /* Espelho */
-    }
-
-    #statusBox {
-      position: absolute;
-      bottom: 20px;
+      top: 20px;
       left: 20px;
-      width: 100px;
-      height: 100px;
-      background-color: red;
+      background: rgba(0, 0, 0, 0.7);
       color: white;
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      font-size: 24px;
-      font-weight: bold;
-      border-radius: 8px;
-      z-index: 3;
-      user-select: none;
+      padding: 10px 15px;
+      border-radius: 10px;
+      font-size: 18px;
     }
   </style>
 </head>
 <body>
   <video id="video" autoplay playsinline></video>
-  <canvas id="canvas"></canvas>
-  <div id="statusBox">Off</div>
+  <div id="status">Esperando gesto 👍...</div>
 
-  <script src="https://cdn.jsdelivr.net/npm/@mediapipe/hands/hands.min.js"></script>
-  <script src="https://cdn.jsdelivr.net/npm/@mediapipe/camera_utils/camera_utils.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs-core"></script>
+  <script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs-converter"></script>
+  <script src="https://cdn.jsdelivr.net/npm/@tensorflow-models/handpose"></script>
+  <script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs-backend-webgl"></script>
+
   <script>
     const video = document.getElementById('video');
-    const canvas = document.getElementById('canvas');
-    const ctx = canvas.getContext('2d');
-    const statusBox = document.getElementById('statusBox');
+    const statusText = document.getElementById('status');
 
-    let isOn = false;
-    let wasInside = false; // Controla se já estava dentro no último frame
-
-    function resizeCanvas() {
-      canvas.width = video.videoWidth;
-      canvas.height = video.videoHeight;
+    async function setupCamera() {
+      const stream = await navigator.mediaDevices.getUserMedia({
+        video: { facingMode: "user" },
+        audio: false
+      });
+      video.srcObject = stream;
+      return new Promise(resolve => {
+        video.onloadedmetadata = () => resolve(video);
+      });
     }
 
-    function updateStatus() {
-      statusBox.textContent = isOn ? "On" : "Off";
-      statusBox.style.backgroundColor = isOn ? "green" : "red";
+    function isThumbsUp(landmarks) {
+      const thumbTip = landmarks[4];
+      const indexTip = landmarks[8];
+      const middleTip = landmarks[12];
+      const ringTip = landmarks[16];
+      const pinkyTip = landmarks[20];
+      const wrist = landmarks[0];
+
+      // Verifica se polegar está para cima
+      const thumbUp = thumbTip.y < wrist.y;
+      // Verifica se os outros dedos estão dobrados (tip mais próximo do pulso)
+      const foldedFingers = 
+        indexTip.y > wrist.y &&
+        middleTip.y > wrist.y &&
+        ringTip.y > wrist.y &&
+        pinkyTip.y > wrist.y;
+
+      return thumbUp && foldedFingers;
     }
 
-    function checkCollision(x, y) {
-      const rect = statusBox.getBoundingClientRect();
-      return (
-        x >= rect.left && x <= rect.right &&
-        y >= rect.top && y <= rect.bottom
-      );
-    }
+    async function main() {
+      await tf.setBackend('webgl');
+      await setupCamera();
+      const model = await handpose.load();
+      statusText.innerText = "Mova a mão com 👍";
 
-    const hands = new Hands({
-      locateFile: file => `https://cdn.jsdelivr.net/npm/@mediapipe/hands/${file}`
-    });
-
-    hands.setOptions({
-      maxNumHands: 1,
-      modelComplexity: 1,
-      minDetectionConfidence: 0.7,
-      minTrackingConfidence: 0.7
-    });
-
-    hands.onResults(results => {
-      ctx.save();
-      ctx.clearRect(0, 0, canvas.width, canvas.height);
-      ctx.drawImage(results.image, 0, 0, canvas.width, canvas.height);
-
-      if (results.multiHandLandmarks && results.multiHandLandmarks.length > 0) {
-        const landmarks = results.multiHandLandmarks[0];
-        const tip = landmarks[8];
-
-        const x = tip.x * canvas.width;
-        const y = tip.y * canvas.height;
-
-        ctx.beginPath();
-        ctx.arc(x, y, 10, 0, 2 * Math.PI);
-        ctx.fillStyle = "red";
-        ctx.shadowColor = "black";
-        ctx.shadowBlur = 10;
-        ctx.fill();
-
-        const pointOnScreen = {
-          x: (1 - tip.x) * window.innerWidth, // espelhamento horizontal
-          y: tip.y * window.innerHeight
-        };
-
-        const isInside = checkCollision(pointOnScreen.x, pointOnScreen.y);
-
-        if (isInside && !wasInside) {
-          // Entrou no botão agora → toggle!
-          isOn = !isOn;
-          updateStatus();
+      setInterval(async () => {
+        const predictions = await model.estimateHands(video);
+        if (predictions.length > 0) {
+          const landmarks = predictions[0].landmarks;
+          if (isThumbsUp(landmarks)) {
+            statusText.innerText = "👍 Detectado! Redirecionando...";
+            setTimeout(() => {
+              window.location.href = "https://www.google.com";
+            }, 1000);
+          }
         }
+      }, 300);
+    }
 
-        wasInside = isInside;
-      } else {
-        wasInside = false;
-      }
-
-      ctx.restore();
-    });
-
-    const camera = new Camera(video, {
-      onFrame: async () => {
-        await hands.send({ image: video });
-      },
-      width: 640,
-      height: 480
-    });
-
-    video.onloadeddata = () => {
-      resizeCanvas();
-      window.addEventListener('resize', resizeCanvas);
-    };
-
-    camera.start();
+    main();
   </script>
 </body>
 </html>
